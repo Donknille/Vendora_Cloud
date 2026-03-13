@@ -18,6 +18,9 @@ android/
 *.p12
 *.key
 *.mobileprovision
+*.aab
+*.apk
+*.ipa
 
 # Metro
 .metro-health-check*
