@@ -1,4 +1,3 @@
-import Constants, { ExecutionEnvironment } from "expo-constants";
 import React, { useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -10,12 +9,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 
 export default function PaywallScreen() {
-    const { currentOffering, purchasePackage, restorePurchases, isSubscribed, bypassSubscription, isInTrial, daysUntilTrialEnds } = useSubscription();
+    const { currentOffering, purchasePackage, restorePurchases, isSubscribed, isInTrial, daysUntilTrialEnds } = useSubscription();
     const theme = useTheme();
     const router = useRouter();
     const [isPurchasing, setIsPurchasing] = useState(false);
-
-    const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
     if (isSubscribed) {
         return (
@@ -154,17 +151,6 @@ export default function PaywallScreen() {
                 <TouchableOpacity onPress={handleRestore} style={styles.restoreBtn}>
                     <Text style={[styles.restoreText, { color: theme.textSecondary }]}>Restore Purchases</Text>
                 </TouchableOpacity>
-
-                {isExpoGo && (
-                    <TouchableOpacity
-                        onPress={bypassSubscription}
-                        style={[styles.restoreBtn, { marginTop: 10, opacity: 0.5 }]}
-                    >
-                        <Text style={[styles.restoreText, { color: theme.error, fontSize: 12 }]}>
-                            [Dev Mode] Bypass Paywall
-                        </Text>
-                    </TouchableOpacity>
-                )}
             </ScrollView>
         </SafeAreaView>
     );

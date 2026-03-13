@@ -3,158 +3,260 @@ import Purchases, { CustomerInfo, PurchasesOffering } from "react-native-purchas
 import { Platform, Alert } from "react-native";
 import * as Device from "expo-device";
 import Constants, { ExecutionEnvironment } from "expo-constants";
+import type {
+  SubscriptionStateDto,
+  SubscriptionStatus,
+} from "@vendora/shared";
+
+import {
+  useRefreshSubscriptionMutation,
+  useSubscriptionStatusQuery,
+} from "./cloud-queries";
 import { useAuth } from "./auth";
 
 interface SubscriptionContextType {
-    isSubscribed: boolean;
-    isInTrial: boolean;
-    canCreateNewItems: boolean;
-    daysUntilTrialEnds: number;
-    customerInfo: CustomerInfo | null;
-    currentOffering: PurchasesOffering | null;
-    isLoading: boolean;
-    purchasePackage: (pkg: any) => Promise<boolean>;
-    restorePurchases: () => Promise<boolean>;
-    bypassSubscription: () => void;
+  status: SubscriptionStatus;
+  isSubscribed: boolean;
+  isInTrial: boolean;
+  canCreateNewItems: boolean;
+  daysUntilTrialEnds: number;
+  trialEndsAt?: string;
+  subscriptionExpiresAt?: string;
+  customerInfo: CustomerInfo | null;
+  currentOffering: PurchasesOffering | null;
+  isLoading: boolean;
+  purchasePackage: (pkg: any) => Promise<boolean>;
+  restorePurchases: () => Promise<boolean>;
+  refreshSubscription: () => Promise<SubscriptionStateDto | null>;
 }
 
-const SubscriptionContext = createContext<SubscriptionContextType>({} as SubscriptionContextType);
+const SubscriptionContext = createContext<SubscriptionContextType>(
+  {} as SubscriptionContextType,
+);
 
-// API Keys should typically be in .env, using placeholder strings for the example architecture
 const APIKeys = {
-    apple: process.env.EXPO_PUBLIC_REVENUECAT_APPLE_KEY || "public_apple_api_key",
-    google: process.env.EXPO_PUBLIC_REVENUECAT_GOOGLE_KEY || "public_google_api_key",
+  apple: process.env.EXPO_PUBLIC_REVENUECAT_APPLE_KEY || "public_apple_api_key",
+  google:
+    process.env.EXPO_PUBLIC_REVENUECAT_GOOGLE_KEY || "public_google_api_key",
 };
 
-export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
-    const { user, isAuthenticated } = useAuth();
-    const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
-    const [currentOffering, setCurrentOffering] = useState<PurchasesOffering | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [demoSubscribed, setDemoSubscribed] = useState(false);
+const ENTITLEMENT_ID =
+  process.env.EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID || "pro";
 
-    const isSubscribed = customerInfo?.entitlements.active["pro"] !== undefined || demoSubscribed;
+const EMPTY_SUBSCRIPTION_STATE: SubscriptionStateDto = {
+  status: "free",
+  isSubscribed: false,
+  isInTrial: false,
+  canCreateNewItems: false,
+  daysUntilTrialEnds: 0,
+};
 
-    // Calculate trial status (14 days from account creation)
-    const userCreatedAt = new Date(user?.created_at || Date.now());
-    const daysSinceCreation = (Date.now() - userCreatedAt.getTime()) / (1000 * 60 * 60 * 24);
-    const isInTrial = daysSinceCreation <= 14;
-    const daysUntilTrialEnds = Math.max(0, Math.ceil(14 - daysSinceCreation));
+function isRevenueCatSupported(): boolean {
+  const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+  return Platform.OS !== "web" && !isExpoGo && Device.isDevice;
+}
 
-    const canCreateNewItems = isSubscribed || isInTrial || demoSubscribed;
+export function SubscriptionProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { user, isAuthenticated } = useAuth();
+  const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
+  const [currentOffering, setCurrentOffering] = useState<PurchasesOffering | null>(
+    null,
+  );
+  const [isRevenueCatLoading, setIsRevenueCatLoading] = useState(true);
 
-    useEffect(() => {
-        setupRevenueCat();
-    }, []);
+  const subscriptionQuery = useSubscriptionStatusQuery();
+  const {
+    mutateAsync: refreshSubscriptionState,
+    isPending: isRefreshingSubscription,
+  } = useRefreshSubscriptionMutation();
+  const subscriptionState = subscriptionQuery.data ?? EMPTY_SUBSCRIPTION_STATE;
 
-    useEffect(() => {
-        if (Platform.OS === "web") return;
+  useEffect(() => {
+    let isMounted = true;
 
-        const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
-        if (isExpoGo || !Device.isDevice) return;
+    async function setupRevenueCat() {
+      setIsRevenueCatLoading(true);
 
-        if (isAuthenticated && user) {
-            Purchases.logIn(user.id).then(({ customerInfo }) => {
-                setCustomerInfo(customerInfo);
-            });
-        } else {
-            Purchases.logOut();
+      try {
+        if (!isRevenueCatSupported()) {
+          if (isMounted) {
+            setCurrentOffering(null);
             setCustomerInfo(null);
+          }
+          return;
         }
-    }, [isAuthenticated, user]);
 
-    const setupRevenueCat = async () => {
-        setIsLoading(true);
-        try {
-            if (Platform.OS === "web") {
-                console.log("RevenueCat is not supported on the web. Skipping setup.");
-                return;
-            }
-
-            // Expo Go doesn't support custom native code which RevenueCat requires
-            // A foolproof way to check if we're in Expo Go is checking the Expo constants execution environment.
-            const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
-
-            if (isExpoGo || !Device.isDevice) {
-                console.log("RevenueCat is not supported in Expo Go or simulator. Skipping setup.");
-                setIsLoading(false);
-                return;
-            }
-
-            if (Platform.OS === "android") {
-                Purchases.configure({ apiKey: APIKeys.google });
-            } else if (Platform.OS === "ios") {
-                Purchases.configure({ apiKey: APIKeys.apple });
-            }
-
-            const offerings = await Purchases.getOfferings();
-            if (offerings.current !== null) {
-                setCurrentOffering(offerings.current);
-            }
-
-            const info = await Purchases.getCustomerInfo();
-            setCustomerInfo(info);
-        } catch (error) {
-            console.error("RevenueCat setup error:", error);
-        } finally {
-            setIsLoading(false);
+        if (Platform.OS === "android") {
+          Purchases.configure({ apiKey: APIKeys.google });
+        } else if (Platform.OS === "ios") {
+          Purchases.configure({ apiKey: APIKeys.apple });
         }
+
+        const offerings = await Purchases.getOfferings();
+        if (isMounted) {
+          setCurrentOffering(offerings.current ?? null);
+        }
+
+        const info = await Purchases.getCustomerInfo();
+        if (isMounted) {
+          setCustomerInfo(info);
+        }
+      } catch (error) {
+        console.error("RevenueCat setup error:", error);
+      } finally {
+        if (isMounted) {
+          setIsRevenueCatLoading(false);
+        }
+      }
+    }
+
+    void setupRevenueCat();
+
+    return () => {
+      isMounted = false;
     };
+  }, []);
 
-    const purchasePackage = async (pack: any) => {
-        try {
-            const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
-            if (isExpoGo || !Device.isDevice || Platform.OS === "web") {
-                Alert.alert("Demo Modus", "Käufe sind in Expo Go oder im Web nicht möglich. In einer echten Umgebung würdest du nun das Abo abschließen.");
-                return false;
-            }
+  useEffect(() => {
+    let isMounted = true;
 
-            const { customerInfo } = await Purchases.purchasePackage(pack);
-            setCustomerInfo(customerInfo);
-            return customerInfo.entitlements.active["pro"] !== undefined;
-        } catch (e: any) {
-            if (!e.userCancelled) {
-                console.error("Purchase error", e);
-            }
-            return false;
+    async function syncRevenueCatIdentity() {
+      if (!isRevenueCatSupported()) {
+        setIsRevenueCatLoading(false);
+        return;
+      }
+
+      setIsRevenueCatLoading(true);
+
+      try {
+        if (!isAuthenticated || !user) {
+          await Purchases.logOut();
+          if (isMounted) {
+            setCustomerInfo(null);
+          }
+          return;
         }
-    };
 
-    const restorePurchases = async () => {
-        try {
-            const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
-            if (isExpoGo || !Device.isDevice || Platform.OS === "web") {
-                Alert.alert("Demo Modus", "Wiederherstellen von Käufen ist in Expo Go oder im Web nicht möglich.");
-                return false;
-            }
-
-            const customerInfo = await Purchases.restorePurchases();
-            setCustomerInfo(customerInfo);
-            return customerInfo.entitlements.active["pro"] !== undefined;
-        } catch (e) {
-            console.error("Restore error", e);
-            return false;
+        const { customerInfo: nextCustomerInfo } = await Purchases.logIn(user.id);
+        if (isMounted) {
+          setCustomerInfo(nextCustomerInfo);
         }
-    };
 
-    return (
-        <SubscriptionContext.Provider
-            value={{
-                isSubscribed,
-                isInTrial,
-                canCreateNewItems,
-                daysUntilTrialEnds,
-                customerInfo,
-                currentOffering,
-                isLoading,
-                purchasePackage,
-                restorePurchases,
-                bypassSubscription: () => setDemoSubscribed(true),
-            }}
-        >
-            {children}
-        </SubscriptionContext.Provider>
-    );
+        await refreshSubscriptionState();
+      } catch (error) {
+        console.error("RevenueCat identity sync error:", error);
+      } finally {
+        if (isMounted) {
+          setIsRevenueCatLoading(false);
+        }
+      }
+    }
+
+    void syncRevenueCatIdentity();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, refreshSubscriptionState, user?.id]);
+
+  const refreshSubscription = async (): Promise<SubscriptionStateDto | null> => {
+    if (!isAuthenticated) {
+      return null;
+    }
+
+    return refreshSubscriptionState();
+  };
+
+  const syncPurchasedEntitlement = async (info: CustomerInfo) => {
+    setCustomerInfo(info);
+
+    const hasLocalEntitlement =
+      info.entitlements.active[ENTITLEMENT_ID] !== undefined;
+
+    try {
+      const refreshedState = await refreshSubscription();
+      return refreshedState?.isSubscribed ?? hasLocalEntitlement;
+    } catch (error) {
+      console.error("Failed to sync subscription status after purchase.", error);
+
+      if (hasLocalEntitlement) {
+        Alert.alert(
+          "Kauf erfolgreich",
+          "Dein Kauf wurde erkannt. Falls Pro nicht sofort freigeschaltet wird, tippe bitte auf 'Restore Purchases'.",
+        );
+      }
+
+      return hasLocalEntitlement;
+    }
+  };
+
+  const purchasePackage = async (pack: any) => {
+    try {
+      if (!isRevenueCatSupported()) {
+        Alert.alert(
+          "Nicht verfuegbar",
+          "Kaeufe sind nur in einem nativen iOS- oder Android-Build verfuegbar.",
+        );
+        return false;
+      }
+
+      const { customerInfo: nextCustomerInfo } =
+        await Purchases.purchasePackage(pack);
+      return syncPurchasedEntitlement(nextCustomerInfo);
+    } catch (error: any) {
+      if (!error?.userCancelled) {
+        console.error("Purchase error", error);
+      }
+      return false;
+    }
+  };
+
+  const restorePurchases = async () => {
+    try {
+      if (!isRevenueCatSupported()) {
+        Alert.alert(
+          "Nicht verfuegbar",
+          "Wiederherstellen ist nur in einem nativen iOS- oder Android-Build verfuegbar.",
+        );
+        return false;
+      }
+
+      const restoredCustomerInfo = await Purchases.restorePurchases();
+      return syncPurchasedEntitlement(restoredCustomerInfo);
+    } catch (error) {
+      console.error("Restore error", error);
+      return false;
+    }
+  };
+
+  return (
+    <SubscriptionContext.Provider
+      value={{
+        status: subscriptionState.status,
+        isSubscribed: subscriptionState.isSubscribed,
+        isInTrial: subscriptionState.isInTrial,
+        canCreateNewItems: subscriptionState.canCreateNewItems,
+        daysUntilTrialEnds: subscriptionState.daysUntilTrialEnds,
+        trialEndsAt: subscriptionState.trialEndsAt,
+        subscriptionExpiresAt: subscriptionState.subscriptionExpiresAt,
+        customerInfo,
+        currentOffering,
+        isLoading:
+          subscriptionQuery.isLoading ||
+          isRefreshingSubscription ||
+          isRevenueCatLoading,
+        purchasePackage,
+        restorePurchases,
+        refreshSubscription,
+      }}
+    >
+      {children}
+    </SubscriptionContext.Provider>
+  );
 }
 
 export const useSubscription = () => useContext(SubscriptionContext);

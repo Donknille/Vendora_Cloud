@@ -28,18 +28,43 @@ function getDaysInMonth(month: number, year: number) {
   return DAYS_IN_MONTH[month];
 }
 
+function parseISODate(dateStr: string): Date | null {
+  const [yearText, monthText, dayText] = dateStr.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day)
+  ) {
+    return null;
+  }
+
+  if (month < 1 || month > 12) {
+    return null;
+  }
+
+  const maxDay = getDaysInMonth(month - 1, year);
+  if (day < 1 || day > maxDay) {
+    return null;
+  }
+
+  return new Date(year, month - 1, day);
+}
+
 function formatDisplayDate(dateStr: string): string {
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return "";
-    return d.toLocaleDateString("de-DE", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
-  } catch {
+  const date = parseISODate(dateStr);
+  if (!date) {
     return "";
   }
+
+  return date.toLocaleDateString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 }
 
 function toISODate(d: Date): string {
@@ -55,17 +80,17 @@ export function DateInput({ value, onChange, label, placeholder }: DateInputProp
   const theme = useTheme();
   const [showPicker, setShowPicker] = useState(false);
 
-  const currentDate = value ? new Date(value) : new Date();
+  const parsedValue = value ? parseISODate(value) : null;
+  const currentDate = parsedValue ?? new Date();
   const [viewYear, setViewYear] = useState(currentDate.getFullYear());
   const [viewMonth, setViewMonth] = useState(currentDate.getMonth());
 
-  const selectedDate = value ? new Date(value) : null;
+  const selectedDate = parsedValue;
 
   const openPicker = () => {
-    if (value) {
-      const d = new Date(value);
-      setViewYear(d.getFullYear());
-      setViewMonth(d.getMonth());
+    if (parsedValue) {
+      setViewYear(parsedValue.getFullYear());
+      setViewMonth(parsedValue.getMonth());
     } else {
       const now = new Date();
       setViewYear(now.getFullYear());

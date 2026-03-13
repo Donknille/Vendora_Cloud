@@ -1,121 +1,121 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
-  View,
-  ScrollView,
   TextInput,
-  Pressable,
-  Platform,
-  KeyboardAvoidingView,
-  Alert,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "@/lib/useTheme";
-import { useLanguage } from "@/lib/LanguageContext";
-import { profileStorage, ordersStorage, OrderItem } from "@/lib/storage";
-import { formatCurrency, parseAmount } from "@/lib/formatCurrency";
 import { router, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { DateInput } from "@/components/DateInput";
-import { useCallback } from "react";
 
-function toISODate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
+import { DateInput } from "@/components/DateInput";
+import { useCreateOrderMutation } from "@/lib/cloud-queries";
+import { formatCurrency } from "@/lib/formatCurrency";
+import { useLanguage } from "@/lib/LanguageContext";
+import {
+  addEditableOrderItem,
+  buildOrderMutationInput,
+  calculateOrderFormTotal,
+  createInitialOrderFormState,
+  generateInvoiceNumber,
+  removeEditableOrderItem,
+  updateEditableOrderItem,
+  type OrderFormState,
+} from "@/lib/order-form";
+import { profileStorage } from "@/lib/storage";
+import { useTheme } from "@/lib/useTheme";
 
 export default function NewOrderScreen() {
   const theme = useTheme();
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
-  const [customerName, setCustomerName] = useState("");
-  const [customerEmail, setCustomerEmail] = useState("");
-  const [customerAddress, setCustomerAddress] = useState("");
-  const [orderDate, setOrderDate] = useState(toISODate(new Date()));
-  const [serviceDate, setServiceDate] = useState(toISODate(new Date()));
-  const [shippingCost, setShippingCost] = useState("");
-  const [notes, setNotes] = useState("");
-  const [items, setItems] = useState<{ id: string; name: string; quantity: number; priceText: string; notes: string }[]>([
-    { id: "1", name: "", quantity: 1, priceText: "", notes: "" },
-  ]);
+  const createOrder = useCreateOrderMutation();
+
+  const [formState, setFormState] = useState<OrderFormState>(
+    createInitialOrderFormState,
+  );
 
   useFocusEffect(
     useCallback(() => {
       profileStorage.get().then((profile) => {
-        if (profile.defaultShippingCost && !shippingCost) {
-          setShippingCost(profile.defaultShippingCost.toString().replace('.', ','));
+        const defaultShippingCost = profile.defaultShippingCost;
+        if (
+          typeof defaultShippingCost === "number" &&
+          !formState.shippingCost
+        ) {
+          setFormState((currentForm) => ({
+            ...currentForm,
+            shippingCost: defaultShippingCost.toString().replace(".", ","),
+          }));
         }
       });
-    }, [])
+    }, [formState.shippingCost]),
   );
 
   const addItem = () => {
-    setItems([
-      ...items,
-      { id: Date.now().toString(), name: "", quantity: 1, priceText: "", notes: "" },
-    ]);
+    setFormState((currentForm) => ({
+      ...currentForm,
+      items: addEditableOrderItem(currentForm.items),
+    }));
   };
 
-  const updateItem = (index: number, field: string, value: string | number) => {
-    const updated = [...items];
-    if (field === "name") {
-      updated[index] = { ...updated[index], name: value as string };
-    } else if (field === "quantity") {
-      updated[index] = { ...updated[index], quantity: parseInt(value as string, 10) || 1 };
-    } else if (field === "price") {
-      updated[index] = { ...updated[index], priceText: value as string };
-    } else if (field === "notes") {
-      updated[index] = { ...updated[index], notes: value as string };
-    }
-    setItems(updated);
+  const updateItem = (
+    index: number,
+    field: "name" | "quantity" | "price" | "notes",
+    value: string,
+  ) => {
+    setFormState((currentForm) => ({
+      ...currentForm,
+      items: updateEditableOrderItem(currentForm.items, index, field, value),
+    }));
   };
 
   const removeItem = (index: number) => {
-    if (items.length <= 1) return;
-    setItems(items.filter((_, i) => i !== index));
+    setFormState((currentForm) => ({
+      ...currentForm,
+      items: removeEditableOrderItem(currentForm.items, index),
+    }));
   };
 
   const saveOrder = async () => {
-    if (!customerName.trim()) {
+    if (!formState.customerName.trim()) {
       Alert.alert(t.orders.missingInfo, t.orders.enterCustomerName);
       return;
     }
-    if (items.some((item) => !item.name.trim())) {
+
+    if (formState.items.some((item) => !item.name.trim())) {
       Alert.alert(t.orders.missingInfo, t.orders.fillItemNames);
       return;
     }
 
-    const parsedItems: OrderItem[] = items.map((item) => ({
-      id: item.id,
-      name: item.name.trim(),
-      quantity: item.quantity,
-      price: parseAmount(item.priceText),
-      notes: item.notes?.trim() || "",
-      isCompleted: false,
-    }));
+    const now = new Date().toISOString();
 
-    await ordersStorage.add({
-      customerName: customerName.trim(),
-      customerEmail: customerEmail.trim(),
-      customerAddress: customerAddress.trim(),
-      items: parsedItems,
-      status: "open",
-      notes: notes.trim(),
-      orderDate: orderDate,
-      serviceDate: serviceDate,
-      shippingCost: parseAmount(shippingCost),
-    });
+    try {
+      await createOrder.mutateAsync(
+        buildOrderMutationInput(formState, {
+          status: "open",
+          invoiceNumber: generateInvoiceNumber(),
+          createdAt: now,
+          updatedAt: now,
+        }),
+      );
 
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    router.back();
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.back();
+    } catch (error) {
+      console.error("Failed to create order", error);
+      Alert.alert("Fehler", "Der Auftrag konnte nicht gespeichert werden.");
+    }
   };
 
-  const itemsTotal = items.reduce((sum, item) => sum + parseAmount(item.priceText) * item.quantity, 0);
-  const total = itemsTotal + parseAmount(shippingCost);
+  const total = calculateOrderFormTotal(formState);
 
   return (
     <KeyboardAvoidingView
@@ -124,49 +124,93 @@ export default function NewOrderScreen() {
       keyboardVerticalOffset={90}
     >
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingBottom: insets.bottom + 40 },
+        ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>{t.orders.customer}</Text>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>
+            {t.orders.customer}
+          </Text>
           <TextInput
-            style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
-            value={customerName}
-            onChangeText={setCustomerName}
+            style={[
+              styles.input,
+              {
+                backgroundColor: theme.inputBg,
+                color: theme.text,
+                borderColor: theme.border,
+              },
+            ]}
+            value={formState.customerName}
+            onChangeText={(customerName) =>
+              setFormState((currentForm) => ({ ...currentForm, customerName }))
+            }
             placeholder={t.orders.customerName}
             placeholderTextColor={theme.textSecondary}
           />
           <TextInput
-            style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
-            value={customerEmail}
-            onChangeText={setCustomerEmail}
+            style={[
+              styles.input,
+              {
+                backgroundColor: theme.inputBg,
+                color: theme.text,
+                borderColor: theme.border,
+              },
+            ]}
+            value={formState.customerEmail}
+            onChangeText={(customerEmail) =>
+              setFormState((currentForm) => ({ ...currentForm, customerEmail }))
+            }
             placeholder={t.orders.email}
             placeholderTextColor={theme.textSecondary}
             keyboardType="email-address"
             autoCapitalize="none"
           />
           <TextInput
-            style={[styles.input, styles.multiline, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
-            value={customerAddress}
-            onChangeText={setCustomerAddress}
+            style={[
+              styles.input,
+              styles.multiline,
+              {
+                backgroundColor: theme.inputBg,
+                color: theme.text,
+                borderColor: theme.border,
+              },
+            ]}
+            value={formState.customerAddress}
+            onChangeText={(customerAddress) =>
+              setFormState((currentForm) => ({
+                ...currentForm,
+                customerAddress,
+              }))
+            }
             placeholder={t.orders.address}
             placeholderTextColor={theme.textSecondary}
             multiline
           />
           <View style={styles.dateRow}>
-            <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{t.orders.orderDate}</Text>
+            <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>
+              {t.orders.orderDate}
+            </Text>
             <DateInput
-              value={orderDate}
-              onChange={setOrderDate}
+              value={formState.orderDate}
+              onChange={(orderDate) =>
+                setFormState((currentForm) => ({ ...currentForm, orderDate }))
+              }
               placeholder={t.orders.orderDatePlaceholder}
             />
           </View>
           <View style={styles.dateRow}>
-            <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Leistungsdatum / -zeitraum</Text>
+            <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>
+              Leistungsdatum / -zeitraum
+            </Text>
             <DateInput
-              value={serviceDate}
-              onChange={setServiceDate}
+              value={formState.serviceDate}
+              onChange={(serviceDate) =>
+                setFormState((currentForm) => ({ ...currentForm, serviceDate }))
+              }
               placeholder="YYYY-MM-DD"
             />
           </View>
@@ -174,48 +218,93 @@ export default function NewOrderScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>{t.orders.items}</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              {t.orders.items}
+            </Text>
             <Pressable onPress={addItem}>
               <Ionicons name="add-circle" size={28} color={theme.gold} />
             </Pressable>
           </View>
 
-          {items.map((item, index) => (
+          {formState.items.map((item, index) => (
             <View
               key={item.id}
-              style={[styles.itemCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+              style={[
+                styles.itemCard,
+                {
+                  backgroundColor: theme.card,
+                  borderColor: theme.border,
+                },
+              ]}
             >
               <View style={styles.itemHeader}>
-                <Text style={[styles.itemNum, { color: theme.gold }]}>#{index + 1}</Text>
-                {items.length > 1 && (
+                <Text style={[styles.itemNum, { color: theme.gold }]}>
+                  #{index + 1}
+                </Text>
+                {formState.items.length > 1 && (
                   <Pressable onPress={() => removeItem(index)}>
-                    <Ionicons name="close-circle" size={22} color={theme.error} />
+                    <Ionicons
+                      name="close-circle"
+                      size={22}
+                      color={theme.error}
+                    />
                   </Pressable>
                 )}
               </View>
               <TextInput
-                style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.inputBg,
+                    color: theme.text,
+                    borderColor: theme.border,
+                  },
+                ]}
                 value={item.name}
-                onChangeText={(v) => updateItem(index, "name", v)}
+                onChangeText={(value) => updateItem(index, "name", value)}
                 placeholder={t.orders.itemName}
                 placeholderTextColor={theme.textSecondary}
               />
               <View style={styles.itemRow}>
                 <View style={styles.itemField}>
-                  <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{t.orders.qty}</Text>
+                  <Text
+                    style={[styles.fieldLabel, { color: theme.textSecondary }]}
+                  >
+                    {t.orders.qty}
+                  </Text>
                   <TextInput
-                    style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: theme.inputBg,
+                        color: theme.text,
+                        borderColor: theme.border,
+                      },
+                    ]}
                     value={item.quantity.toString()}
-                    onChangeText={(v) => updateItem(index, "quantity", v)}
+                    onChangeText={(value) =>
+                      updateItem(index, "quantity", value)
+                    }
                     keyboardType="number-pad"
                   />
                 </View>
                 <View style={[styles.itemField, { flex: 2 }]}>
-                  <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{t.orders.price}</Text>
+                  <Text
+                    style={[styles.fieldLabel, { color: theme.textSecondary }]}
+                  >
+                    {t.orders.price}
+                  </Text>
                   <TextInput
-                    style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: theme.inputBg,
+                        color: theme.text,
+                        borderColor: theme.border,
+                      },
+                    ]}
                     value={item.priceText}
-                    onChangeText={(v) => updateItem(index, "price", v)}
+                    onChangeText={(value) => updateItem(index, "price", value)}
                     placeholder="0,00"
                     placeholderTextColor={theme.textSecondary}
                     keyboardType="decimal-pad"
@@ -223,21 +312,48 @@ export default function NewOrderScreen() {
                 </View>
               </View>
               <TextInput
-                style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border, marginTop: 4 }]}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.inputBg,
+                    color: theme.text,
+                    borderColor: theme.border,
+                    marginTop: 4,
+                  },
+                ]}
                 value={item.notes}
-                onChangeText={(v) => updateItem(index, "notes", v)}
-                placeholder={t.orders.additionalNotes || "Notizen zum Artikel (optional)"}
+                onChangeText={(value) => updateItem(index, "notes", value)}
+                placeholder={t.orders.additionalNotes || "Notizen zum Artikel"}
                 placeholderTextColor={theme.textSecondary}
               />
             </View>
           ))}
 
-          <View style={styles.itemCard}>
-            <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Versandkosten</Text>
+          <View
+            style={[
+              styles.itemCard,
+              { borderColor: theme.border, backgroundColor: theme.card },
+            ]}
+          >
+            <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>
+              Versandkosten
+            </Text>
             <TextInput
-              style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
-              value={shippingCost}
-              onChangeText={setShippingCost}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.inputBg,
+                  color: theme.text,
+                  borderColor: theme.border,
+                },
+              ]}
+              value={formState.shippingCost}
+              onChangeText={(shippingCost) =>
+                setFormState((currentForm) => ({
+                  ...currentForm,
+                  shippingCost,
+                }))
+              }
               placeholder="0,00"
               placeholderTextColor={theme.textSecondary}
               keyboardType="decimal-pad"
@@ -246,11 +362,23 @@ export default function NewOrderScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>{t.orders.notes}</Text>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>
+            {t.orders.notes}
+          </Text>
           <TextInput
-            style={[styles.input, styles.multiline, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
-            value={notes}
-            onChangeText={setNotes}
+            style={[
+              styles.input,
+              styles.multiline,
+              {
+                backgroundColor: theme.inputBg,
+                color: theme.text,
+                borderColor: theme.border,
+              },
+            ]}
+            value={formState.notes}
+            onChangeText={(notes) =>
+              setFormState((currentForm) => ({ ...currentForm, notes }))
+            }
             placeholder={t.orders.additionalNotes}
             placeholderTextColor={theme.textSecondary}
             multiline
@@ -258,7 +386,9 @@ export default function NewOrderScreen() {
         </View>
 
         <View style={[styles.totalRow, { borderTopColor: theme.border }]}>
-          <Text style={[styles.totalLabel, { color: theme.textSecondary }]}>{t.orders.total}</Text>
+          <Text style={[styles.totalLabel, { color: theme.textSecondary }]}>
+            {t.orders.total}
+          </Text>
           <Text style={[styles.totalValue, { color: theme.gold }]}>
             {formatCurrency(total)}
           </Text>
@@ -266,10 +396,11 @@ export default function NewOrderScreen() {
 
         <Pressable
           onPress={saveOrder}
+          disabled={createOrder.isPending}
           style={({ pressed }) => [
             styles.saveBtn,
             { backgroundColor: theme.gold },
-            pressed && { opacity: 0.8 },
+            (pressed || createOrder.isPending) && { opacity: 0.8 },
           ]}
         >
           <Ionicons name="checkmark" size={20} color="#0D0D0D" />
@@ -285,19 +416,50 @@ const styles = StyleSheet.create({
   scroll: { padding: 20, gap: 24 },
   section: { gap: 12 },
   sectionTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
-  sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  input: { borderRadius: 12, padding: 14, fontSize: 15, fontFamily: "Inter_400Regular", borderWidth: 1 },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  input: {
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    fontFamily: "Inter_400Regular",
+    borderWidth: 1,
+  },
   multiline: { minHeight: 70, textAlignVertical: "top" },
   itemCard: { borderRadius: 14, padding: 14, gap: 10, borderWidth: 1 },
-  itemHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  itemHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   itemNum: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   itemRow: { flexDirection: "row", gap: 12 },
   itemField: { flex: 1, gap: 4 },
   fieldLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   dateRow: { gap: 6 },
-  totalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderTopWidth: 1, paddingTop: 16 },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderTopWidth: 1,
+    paddingTop: 16,
+  },
   totalLabel: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
   totalValue: { fontSize: 28, fontFamily: "Inter_700Bold" },
-  saveBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, borderRadius: 14 },
-  saveBtnText: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#0D0D0D" },
+  saveBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    padding: 16,
+    borderRadius: 14,
+  },
+  saveBtnText: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    color: "#0D0D0D",
+  },
 });

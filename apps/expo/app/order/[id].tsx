@@ -12,12 +12,13 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import type { OrderDto as Order } from "@vendora/shared";
 import { useTheme } from "@/lib/useTheme";
 import { useLanguage } from "@/lib/LanguageContext";
 import { Card } from "@/components/Card";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatCurrency } from "@/lib/formatCurrency";
-import { Order, profileStorage } from "@/lib/storage";
+import { profileStorage } from "@/lib/storage";
 import { useLocalSearchParams, router } from "expo-router";
 import { useOrdersQuery, useUpdateOrderMutation, useDeleteOrderMutation } from "@/lib/cloud-queries";
 import * as Haptics from "expo-haptics";

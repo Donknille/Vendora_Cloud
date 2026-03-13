@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import type { OrderDto as Order } from "@vendora/shared";
 import { useTheme } from "@/lib/useTheme";
 import { useLanguage } from "@/lib/LanguageContext";
 import { useSubscription } from "@/lib/subscription";
@@ -17,7 +18,6 @@ import { Card } from "@/components/Card";
 import { StatusBadge } from "@/components/StatusBadge";
 import { EmptyState } from "@/components/EmptyState";
 import { formatCurrency } from "@/lib/formatCurrency";
-import { Order } from "@/lib/storage";
 import { router } from "expo-router";
 import { useOrdersQuery } from "@/lib/cloud-queries";
 import * as Haptics from "expo-haptics";

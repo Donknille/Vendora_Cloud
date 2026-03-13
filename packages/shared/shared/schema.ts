@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, boolean } from "drizzle-orm/pg-core";
+import { boolean, pgTable, text, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -9,8 +9,10 @@ export const users = pgTable("users", {
     .default(sql`gen_random_uuid()`),
   supabase_id: text("supabase_id").unique("users_supabase_id_key"),
   email: text("email").notNull().unique("users_email_key"),
-  revenuecat_app_user_id: text("revenuecat_app_user_id").unique("users_revenuecat_app_user_id_key"),
-  subscription_status: text("subscription_status").default("active"), // e.g., active, past_due, canceled
+  revenuecat_app_user_id: text("revenuecat_app_user_id").unique(
+    "users_revenuecat_app_user_id_key",
+  ),
+  subscription_status: text("subscription_status").default("trialing"),
   subscription_expires_at: text("subscription_expires_at"),
   created_at: text("created_at").default(sql`CURRENT_TIMESTAMP`),
 });
@@ -23,11 +25,11 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
-// -- Cloud Sync Tables --
-
 export const orders = pgTable("orders", {
-  id: varchar("id").primaryKey(), // Using client-generated ID for offline-first ease
-  user_id: text("user_id").notNull().references(() => users.supabase_id, { onDelete: 'cascade' }),
+  id: varchar("id").primaryKey(),
+  user_id: text("user_id")
+    .notNull()
+    .references(() => users.supabase_id, { onDelete: "cascade" }),
   customer_name: text("customer_name").notNull(),
   customer_email: text("customer_email"),
   customer_address: text("customer_address"),
@@ -36,7 +38,7 @@ export const orders = pgTable("orders", {
   notes: text("notes"),
   order_date: text("order_date").notNull(),
   service_date: text("service_date"),
-  shipping_cost: text("shipping_cost"), // Storing as string or decimal
+  shipping_cost: text("shipping_cost"),
   total: text("total"),
   created_at: text("created_at"),
   updated_at: text("updated_at"),
@@ -44,10 +46,14 @@ export const orders = pgTable("orders", {
 
 export const order_items = pgTable("order_items", {
   id: varchar("id").primaryKey(),
-  user_id: text("user_id").notNull().references(() => users.supabase_id, { onDelete: 'cascade' }),
-  order_id: varchar("order_id").notNull().references(() => orders.id, { onDelete: 'cascade' }),
+  user_id: text("user_id")
+    .notNull()
+    .references(() => users.supabase_id, { onDelete: "cascade" }),
+  order_id: varchar("order_id")
+    .notNull()
+    .references(() => orders.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  quantity: text("quantity").notNull(), // text to avoid precision issues in simple setup
+  quantity: text("quantity").notNull(),
   price: text("price").notNull(),
   notes: text("notes"),
   is_completed: boolean("is_completed").default(false),
@@ -55,21 +61,28 @@ export const order_items = pgTable("order_items", {
 
 export const markets = pgTable("markets", {
   id: varchar("id").primaryKey(),
-  user_id: text("user_id").notNull().references(() => users.supabase_id, { onDelete: 'cascade' }),
+  user_id: text("user_id")
+    .notNull()
+    .references(() => users.supabase_id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   date: text("date").notNull(),
   location: text("location"),
   stand_fee: text("stand_fee"),
   travel_cost: text("travel_cost"),
   notes: text("notes"),
+  quick_items: text("quick_items"),
   status: text("status"),
   created_at: text("created_at"),
 });
 
 export const market_sales = pgTable("market_sales", {
   id: varchar("id").primaryKey(),
-  user_id: text("user_id").notNull().references(() => users.supabase_id, { onDelete: 'cascade' }),
-  market_id: varchar("market_id").notNull().references(() => markets.id, { onDelete: 'cascade' }),
+  user_id: text("user_id")
+    .notNull()
+    .references(() => users.supabase_id, { onDelete: "cascade" }),
+  market_id: varchar("market_id")
+    .notNull()
+    .references(() => markets.id, { onDelete: "cascade" }),
   description: text("description").notNull(),
   amount: text("amount").notNull(),
   quantity: text("quantity").notNull(),
@@ -78,7 +91,9 @@ export const market_sales = pgTable("market_sales", {
 
 export const expenses = pgTable("expenses", {
   id: varchar("id").primaryKey(),
-  user_id: text("user_id").notNull().references(() => users.supabase_id, { onDelete: 'cascade' }),
+  user_id: text("user_id")
+    .notNull()
+    .references(() => users.supabase_id, { onDelete: "cascade" }),
   description: text("description").notNull(),
   amount: text("amount").notNull(),
   category: text("category").notNull(),
@@ -87,7 +102,6 @@ export const expenses = pgTable("expenses", {
   created_at: text("created_at"),
 });
 
-// -- Zod Validation Schemas for API routes --
 export const insertOrderSchema = createInsertSchema(orders);
 export const insertOrderItemSchema = createInsertSchema(order_items);
 export const insertMarketSchema = createInsertSchema(markets);

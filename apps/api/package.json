@@ -12,6 +12,7 @@
     "@sentry/node": "^10.42.0",
     "@sentry/profiling-node": "^10.42.0",
     "@stardazed/streams-text-encoding": "^1.0.2",
+    "@supabase/supabase-js": "^2.97.0",
     "@vendora/shared": "*",
     "drizzle-orm": "^0.39.3",
     "drizzle-zod": "^0.7.0",

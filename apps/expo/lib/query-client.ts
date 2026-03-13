@@ -71,6 +71,11 @@ export const asyncStoragePersister = createAsyncStoragePersister({
   storage: AsyncStorage,
 });
 
+export async function resetAppQueryCache(): Promise<void> {
+  queryClient.clear();
+  await asyncStoragePersister.removeClient();
+}
+
 type UnauthorizedBehavior = "returnNull" | "throw";
 export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;

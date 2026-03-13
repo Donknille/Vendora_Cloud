@@ -1,4 +1,5 @@
-import { Order, CompanyProfile } from "@/lib/storage";
+import type { OrderDto as Order } from "@vendora/shared";
+import type { CompanyProfile } from "@/lib/storage";
 import { Translations } from "@/lib/i18n";
 
 function escapeHtml(text: string): string {

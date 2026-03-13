@@ -15,7 +15,8 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.vendora.app"
+      "bundleIdentifier": "com.vendora.app",
+      "buildNumber": "4"
     },
     "android": {
       "package": "com.vendora.app",

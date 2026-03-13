@@ -1,7 +1,7 @@
 {
   "name": "@vendora/shared",
   "version": "1.0.0",
-  "main": "schema.ts",
+  "main": "index.ts",
   "dependencies": {
     "drizzle-orm": "^0.39.3",
     "drizzle-zod": "^0.7.0",

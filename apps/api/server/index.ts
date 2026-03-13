@@ -1,18 +1,21 @@
 import express from "express";
-import type { Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
+import type { NextFunction, Request, Response } from "express";
 import * as fs from "fs";
 import * as path from "path";
 
 import * as Sentry from "@sentry/node";
 import { nodeProfilingIntegration } from "@sentry/profiling-node";
+
 import { logger } from "./logger";
+import { registerRoutes } from "./routes";
 
 Sentry.init({
-  dsn: process.env.VITE_SENTRY_DSN || process.env.EXPO_PUBLIC_SENTRY_DSN || process.env.SENTRY_DSN || "",
-  integrations: [
-    nodeProfilingIntegration(),
-  ],
+  dsn:
+    process.env.VITE_SENTRY_DSN ||
+    process.env.EXPO_PUBLIC_SENTRY_DSN ||
+    process.env.SENTRY_DSN ||
+    "",
+  integrations: [nodeProfilingIntegration()],
   tracesSampleRate: 1.0,
   profilesSampleRate: 1.0,
 });
@@ -25,11 +28,18 @@ declare module "http" {
   }
 }
 
-function setupCors(app: express.Application) {
-  app.use((req, res, next) => {
+function setupCors(appInstance: express.Application) {
+  appInstance.use((req, res, next) => {
     const origins = new Set<string>();
+    const allowedHeaders = [
+      "Authorization",
+      "Content-Type",
+      "x-app-integrity-token",
+      "x-timestamp",
+      "x-app-signature",
+      "x-revenuecat-signature",
+    ];
 
-    // Add production API domain
     origins.add("https://vendora-sub.onrender.com");
     if (process.env.EXPO_PUBLIC_DOMAIN) {
       origins.add(process.env.EXPO_PUBLIC_DOMAIN);
@@ -40,26 +50,24 @@ function setupCors(app: express.Application) {
     }
 
     if (process.env.REPLIT_DOMAINS) {
-      process.env.REPLIT_DOMAINS.split(",").forEach((d) => {
-        origins.add(`https://${d.trim()}`);
+      process.env.REPLIT_DOMAINS.split(",").forEach((domain) => {
+        origins.add(`https://${domain.trim()}`);
       });
     }
 
     const origin = req.header("origin");
-
-    // Allow localhost origins for Expo web development (any port)
-    // Also allow requests without origin (typical for React Native mobile apps)
     const isLocalhost =
       origin?.startsWith("http://localhost:") ||
       origin?.startsWith("http://127.0.0.1:");
 
-    if (!origin || (origin && (origins.has(origin) || isLocalhost))) {
+    if (!origin || origins.has(origin) || isLocalhost) {
+      res.header("Vary", "Origin");
       res.header("Access-Control-Allow-Origin", origin || "*");
       res.header(
         "Access-Control-Allow-Methods",
         "GET, POST, PUT, DELETE, OPTIONS",
       );
-      res.header("Access-Control-Allow-Headers", "Content-Type");
+      res.header("Access-Control-Allow-Headers", allowedHeaders.join(", "));
       res.header("Access-Control-Allow-Credentials", "true");
     }
 
@@ -71,8 +79,8 @@ function setupCors(app: express.Application) {
   });
 }
 
-function setupBodyParsing(app: express.Application) {
-  app.use(
+function setupBodyParsing(appInstance: express.Application) {
+  appInstance.use(
     express.json({
       verify: (req, _res, buf) => {
         req.rawBody = buf;
@@ -80,33 +88,35 @@ function setupBodyParsing(app: express.Application) {
     }),
   );
 
-  app.use(express.urlencoded({ extended: false }));
+  appInstance.use(express.urlencoded({ extended: false }));
 }
 
-function setupRequestLogging(app: express.Application) {
-  app.use((req, res, next) => {
+function setupRequestLogging(appInstance: express.Application) {
+  appInstance.use((req, res, next) => {
     const start = Date.now();
-    const path = req.path;
-    let capturedJsonResponse: Record<string, unknown> | undefined = undefined;
+    const requestPath = req.path;
+    let capturedJsonResponse: Record<string, unknown> | undefined;
 
     const originalResJson = res.json;
-    res.json = function (bodyJson, ...args) {
+    res.json = function patchedJson(bodyJson, ...args) {
       capturedJsonResponse = bodyJson;
       return originalResJson.apply(res, [bodyJson, ...args]);
     };
 
     res.on("finish", () => {
-      if (!path.startsWith("/api")) return;
+      if (!requestPath.startsWith("/api")) {
+        return;
+      }
 
       const duration = Date.now() - start;
+      let logLine = `${req.method} ${requestPath} ${res.statusCode} in ${duration}ms`;
 
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
 
       if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
+        logLine = `${logLine.slice(0, 79)}...`;
       }
 
       logger.info(logLine);
@@ -179,7 +189,7 @@ function serveLandingPage({
   res.status(200).send(html);
 }
 
-function configureExpoAndLanding(app: express.Application) {
+function configureExpoAndLanding(appInstance: express.Application) {
   const templatePath = path.resolve(
     process.cwd(),
     "server",
@@ -191,7 +201,7 @@ function configureExpoAndLanding(app: express.Application) {
 
   logger.info("Serving static Expo files with dynamic manifest routing");
 
-  app.use((req: Request, res: Response, next: NextFunction) => {
+  appInstance.use((req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith("/api")) {
       return next();
     }
@@ -217,14 +227,14 @@ function configureExpoAndLanding(app: express.Application) {
     next();
   });
 
-  app.use("/assets", express.static(path.resolve(process.cwd(), "assets")));
-  app.use(express.static(path.resolve(process.cwd(), "static-build")));
+  appInstance.use("/assets", express.static(path.resolve(process.cwd(), "assets")));
+  appInstance.use(express.static(path.resolve(process.cwd(), "static-build")));
 
   logger.info("Expo routing: Checking expo-platform header on / and /manifest");
 }
 
-function setupErrorHandler(app: express.Application) {
-  app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+function setupErrorHandler(appInstance: express.Application) {
+  appInstance.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
     const error = err as {
       status?: number;
       statusCode?: number;
@@ -248,13 +258,11 @@ function setupErrorHandler(app: express.Application) {
   setupCors(app);
   setupBodyParsing(app);
   setupRequestLogging(app);
-
   configureExpoAndLanding(app);
 
   const server = await registerRoutes(app);
 
   Sentry.setupExpressErrorHandler(app);
-
   setupErrorHandler(app);
 
   const port = parseInt(process.env.PORT || "5000", 10);

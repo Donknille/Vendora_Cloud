@@ -29,15 +29,14 @@ export class MemStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = randomUUID();
-    // Default values for subscription data to fulfill User type
     const user: User = {
       ...insertUser,
       id,
       supabase_id: insertUser.supabase_id ?? null,
       revenuecat_app_user_id: null,
-      subscription_status: "active",
+      subscription_status: "trialing",
       subscription_expires_at: null,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
     };
     this.users.set(id, user);
     return user;

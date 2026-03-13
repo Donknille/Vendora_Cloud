@@ -30,10 +30,14 @@ cp .env.production.example .env.production
 ```
 
 Required values include:
+- `EXPO_PUBLIC_API_URL`
+- `EXPO_PUBLIC_API_SECRET`
 - `EXPO_PUBLIC_SUPABASE_URL`
 - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
 - `EXPO_PUBLIC_REVENUECAT_APPLE_KEY`
 - `EXPO_PUBLIC_REVENUECAT_GOOGLE_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `REVENUECAT_SECRET_KEY`
 - `DATABASE_URL`
 - `DIRECT_URL`
 
@@ -54,6 +58,14 @@ npm run ios
 npm run web
 ```
 
+Release helpers:
+
+```bash
+npm run release:gate
+npm run build:preview:ios
+npm run build:preview:android
+```
+
 ## Run the API
 
 ```bash
@@ -72,3 +84,4 @@ npm start
 
 - Build artifacts such as `.aab`, `.apk`, and `.ipa` files are intentionally not tracked in Git.
 - Store builds should be published through EAS or attached as GitHub Releases instead of being committed to the repository.
+- The mobile beta checklist and smoke-test matrix live in `apps/expo/release/MOBILE_BETA_GATE.md`.
