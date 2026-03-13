@@ -1,0 +1,8 @@
+{
+  "name": "vendora-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}

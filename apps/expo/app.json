@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "Vendora",
+    "slug": "vendora",
+    "version": "1.1.1",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "vendora",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0D0D0D"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.vendora.app"
+    },
+    "android": {
+      "package": "com.vendora.app",
+      "versionCode": 4,
+      "adaptiveIcon": {
+        "backgroundColor": "#0D0D0D",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://replit.com/"
+        }
+      ],
+      "expo-font",
+      "expo-web-browser",
+      "expo-secure-store",
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "vendora-expo",
+          "organization": "vendora"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {
+        "origin": "https://replit.com/"
+      },
+      "eas": {
+        "projectId": "7a9b8cbb-06ac-478a-a8a5-6d09c740f681"
+      }
+    }
+  }
+}

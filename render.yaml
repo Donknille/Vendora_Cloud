@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: vendora-api
+    env: node
+    buildCommand: npm install && npm run build --workspace=@vendora/api
+    startCommand: npm start --workspace=@vendora/api
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: DATABASE_URL
+        sync: false # You will add this securely in the Render Dashboard
+      - key: EXPO_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: EXPO_PUBLIC_SUPABASE_ANON_KEY
+        sync: false

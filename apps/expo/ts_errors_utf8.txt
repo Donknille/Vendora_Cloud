@@ -1,0 +1,36 @@
+﻿app/market/[id].tsx(74,61): error TS2345: Argument of type '{ name: string; date: string; location: string; standFee: number; travelCost: number; notes: string; status: string; quickItems: { name: string; price: number; }[]; }' is not assignable to parameter of type 'Partial<MarketEvent>'.
+  Types of property 'status' are incompatible.
+    Type 'string' is not assignable to type '"open" | "closed" | undefined'.
+app/market/[id].tsx(88,10): error TS2304: Cannot find name 'saleDesc'.
+app/market/[id].tsx(88,30): error TS2304: Cannot find name 'saleAmount'.
+app/market/[id].tsx(91,20): error TS2304: Cannot find name 'saleDesc'.
+app/market/[id].tsx(92,27): error TS2304: Cannot find name 'saleAmount'.
+app/market/[id].tsx(93,26): error TS2304: Cannot find name 'saleQty'.
+app/market/[id].tsx(96,5): error TS2304: Cannot find name 'setSaleDesc'.
+app/market/[id].tsx(97,5): error TS2304: Cannot find name 'setSaleAmount'.
+app/market/[id].tsx(98,5): error TS2304: Cannot find name 'setSaleQty'.
+app/market/[id].tsx(99,5): error TS2304: Cannot find name 'setShowQuickSale'.
+app/market/[id].tsx(181,67): error TS18046: 'a' is of type 'unknown'.
+app/market/[id].tsx(181,95): error TS18046: 'b' is of type 'unknown'.
+app/market/[id].tsx(187,15): error TS18046: 'group' is of type 'unknown'.
+app/market/[id].tsx(187,47): error TS18046: 'group' is of type 'unknown'.
+app/market/[id].tsx(191,26): error TS18046: 'group' is of type 'unknown'.
+app/market/[id].tsx(191,40): error TS7006: Parameter 'groupSaleId' implicitly has an 'any' type.
+app/market/[id].tsx(292,21): error TS2304: Cannot find name 'setShowQuickSale'.
+app/market/[id].tsx(292,39): error TS2304: Cannot find name 'showQuickSale'.
+app/market/[id].tsx(301,27): error TS2304: Cannot find name 'showQuickSale'.
+app/market/[id].tsx(368,14): error TS2304: Cannot find name 'showQuickSale'.
+app/market/[id].tsx(372,26): error TS2304: Cannot find name 'saleDesc'.
+app/market/[id].tsx(373,33): error TS2304: Cannot find name 'setSaleDesc'.
+app/market/[id].tsx(380,28): error TS2304: Cannot find name 'saleQty'.
+app/market/[id].tsx(381,35): error TS2304: Cannot find name 'setSaleQty'.
+app/market/[id].tsx(388,28): error TS2304: Cannot find name 'saleAmount'.
+app/market/[id].tsx(389,35): error TS2304: Cannot find name 'setSaleAmount'.
+app/market/[id].tsx(427,24): error TS18046: 'group' is of type 'unknown'.
+app/market/[id].tsx(430,24): error TS18046: 'group' is of type 'unknown'.
+app/market/[id].tsx(430,58): error TS18046: 'group' is of type 'unknown'.
+app/market/[id].tsx(434,37): error TS18046: 'group' is of type 'unknown'.
+app/market/[id].tsx(434,52): error TS18046: 'group' is of type 'unknown'.
+app/market/new.tsx(75,36): error TS2345: Argument of type '{ name: string; date: string; location: string; standFee: number; travelCost: number; notes: string; status: string; quickItems: { name: string; price: number; }[]; }' is not assignable to parameter of type 'Partial<MarketEvent>'.
+  Types of property 'status' are incompatible.
+    Type 'string' is not assignable to type '"open" | "closed" | undefined'.
